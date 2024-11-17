@@ -1,0 +1,21 @@
+services:
+  app:
+    container_name: app-container
+    build: .
+    ports:
+      - 8001:8000
+    depends_on:
+      - postgres
+
+  postgres:
+    container_name: postgres-container
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "chat-api"
+      POSTGRES_USER: "chat-api-user"
+      POSTGRES_PASSWORD: "11111111"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data: {}

@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+
+# Virtual environments
+.venv/
+
+# Secrets :)
+.env
+certificates/*
+!certificates/.gitkeep
+
+# Migrations
+migrations/versions/*
+!migrations/versions/.gitkeep
+
+# Other
+requirements.txt
