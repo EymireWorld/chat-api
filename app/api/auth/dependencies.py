@@ -1,0 +1,79 @@
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
+
+import bcrypt
+import jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_session
+from app.models import UserModel
+from app.schemas import UserSchema
+from app.settings import settings
+
+
+def encode_jwt(user_id: int) -> str:
+    data = {
+        'user_id': user_id,
+        'end_at': int((datetime.now(UTC) + timedelta(seconds=settings.JWT_TOKEN_LIFETIME_MINUTES)).timestamp()),
+    }
+
+    with open('./certificates/jwt-private.pem', encoding='utf-8') as key_file:
+        private_key = key_file.read()
+
+    return jwt.encode(data, private_key, 'RS256')
+
+
+def decode_jwt(token: str | bytes) -> dict:
+    with open('./certificates/jwt-public.pem', encoding='utf-8') as key_file:
+        public_key = key_file.read()
+
+    return jwt.decode(token, public_key, ['RS256'])
+
+
+def hash_password(password: str) -> bytes:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+
+
+def validate_password(password: str, hashed_password: bytes) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed_password)
+
+
+security = HTTPBearer()
+
+
+async def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    session: AsyncSession = Depends(get_session),
+) -> UserSchema:
+    if credentials.scheme != 'Bearer':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Invalid authentication scheme.',
+        )
+
+    data = decode_jwt(credentials.credentials)
+
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Invalid token.',
+        )
+    if data['end_at'] < int(datetime.now(UTC).timestamp()):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Expired token.',
+        )
+
+    stmt = select(UserModel).where(UserModel.id == data['user_id'])
+    result = await session.execute(stmt)
+    result = result.scalar()
+
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='User not found.',
+        )
+    return UserSchema.model_validate(result.scalar())

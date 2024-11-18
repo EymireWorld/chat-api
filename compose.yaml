@@ -2,18 +2,27 @@ services:
   app:
     container_name: app-container
     build: .
+    command: bash -c "cd /code && alembic revision --autogenerate && alembic upgrade head && fastapi run app"
     ports:
       - 8001:8000
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   postgres:
     container_name: postgres-container
     image: postgres:16-alpine
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       POSTGRES_DB: "chat-api"
       POSTGRES_USER: "chat-api-user"
       POSTGRES_PASSWORD: "11111111"
+    ports:
+      - 8002:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
